@@ -861,6 +861,43 @@ class OpenProjectClient:
         """
         return await self._request("GET", f"/projects/{project_id}")
 
+    async def get_subprojects(self, parent_id: int) -> Dict:
+        """
+        Retrieve direct subprojects of a parent project.
+
+        Args:
+            parent_id: The parent project ID
+
+        Returns:
+            Dict: API response containing direct child projects
+        """
+        # Use parent_id filter for direct children only
+        filters = json.dumps([{
+            "parent_id": {"operator": "=", "values": [str(parent_id)]}
+        }])
+        return await self.get_projects(filters)
+
+    async def validate_parent_project(self, parent_id: int, child_id: Optional[int] = None) -> bool:
+        """
+        Validate if a project can be a parent.
+        Uses the available_parent_projects endpoint.
+
+        Args:
+            parent_id: The parent project ID to validate
+            child_id: Optional child project ID (for existing projects)
+
+        Returns:
+            bool: True if valid parent
+        """
+        endpoint = "/projects/available_parent_projects"
+        if child_id:
+            endpoint += f"?of={child_id}"
+
+        result = await self._request("GET", endpoint)
+        candidates = result.get("_embedded", {}).get("elements", [])
+
+        return any(p.get("id") == parent_id for p in candidates)
+
     async def get_roles(self) -> Dict:
         """
         Retrieve available roles.
@@ -1044,7 +1081,11 @@ class OpenProjectClient:
         )
 
     async def list_work_package_children(
-        self, parent_id: int, include_descendants: bool = False
+        self,
+        parent_id: int,
+        include_descendants: bool = False,
+        offset: Optional[int] = None,
+        page_size: Optional[int] = None,
     ) -> Dict:
         """
         List all child work packages of a parent.
@@ -1052,6 +1093,8 @@ class OpenProjectClient:
         Args:
             parent_id: The parent work package ID
             include_descendants: If True, includes grandchildren and below
+            offset: Optional starting index for pagination
+            page_size: Optional number of results per page
 
         Returns:
             Dict: API response containing child work packages
@@ -1067,7 +1110,14 @@ class OpenProjectClient:
                 [{"parent": {"operator": "=", "values": [str(parent_id)]}}]
             )
 
-        endpoint = f"/work_packages?filters={quote(filters)}"
+        # Build query parameters
+        query_params = [f"filters={quote(filters)}"]
+        if offset is not None:
+            query_params.append(f"offset={offset}")
+        if page_size is not None:
+            query_params.append(f"pageSize={page_size}")
+
+        endpoint = f"/work_packages?" + "&".join(query_params)
         result = await self._request("GET", endpoint)
 
         # Ensure proper response structure
@@ -1077,6 +1127,19 @@ class OpenProjectClient:
             result["_embedded"]["elements"] = []
 
         return result
+
+    # Alias for backward compatibility and consistency with tool naming
+    async def get_work_package_children(
+        self,
+        parent_id: int,
+        include_descendants: bool = False,
+        offset: Optional[int] = None,
+        page_size: Optional[int] = None,
+    ) -> Dict:
+        """Alias for list_work_package_children."""
+        return await self.list_work_package_children(
+            parent_id, include_descendants, offset, page_size
+        )
 
     async def create_work_package_relation(self, data: Dict) -> Dict:
         """
@@ -1192,3 +1255,143 @@ class OpenProjectClient:
             Dict: Relation data
         """
         return await self._request("GET", f"/relations/{relation_id}")
+
+    # ============================================================
+    # News API Methods
+    # ============================================================
+
+    async def get_news(
+        self,
+        filters: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        offset: Optional[int] = None,
+        page_size: Optional[int] = None,
+    ) -> Dict:
+        """
+        Retrieve news entries with filtering and pagination.
+
+        Args:
+            filters: Optional JSON-encoded filter string (e.g., project_id filter)
+            sort_by: Optional JSON-encoded sort criteria (e.g., [["created_at", "asc"]])
+            offset: Optional starting index for pagination
+            page_size: Optional number of results per page
+
+        Returns:
+            Dict: API response containing news entries
+        """
+        endpoint = "/news"
+
+        # Build query parameters
+        query_params = []
+        if filters:
+            encoded_filters = quote(filters)
+            query_params.append(f"filters={encoded_filters}")
+        if sort_by:
+            encoded_sort = quote(sort_by)
+            query_params.append(f"sortBy={encoded_sort}")
+        if offset is not None:
+            query_params.append(f"offset={offset}")
+        if page_size is not None:
+            query_params.append(f"pageSize={page_size}")
+
+        if query_params:
+            endpoint += "?" + "&".join(query_params)
+
+        result = await self._request("GET", endpoint)
+
+        # Ensure proper response structure
+        if "_embedded" not in result:
+            result["_embedded"] = {"elements": []}
+        elif "elements" not in result.get("_embedded", {}):
+            result["_embedded"]["elements"] = []
+
+        return result
+
+    async def get_news_item(self, news_id: int) -> Dict:
+        """
+        Retrieve a specific news entry by ID.
+
+        Args:
+            news_id: The news ID
+
+        Returns:
+            Dict: News entry data
+        """
+        return await self._request("GET", f"/news/{news_id}")
+
+    async def create_news(self, data: Dict) -> Dict:
+        """
+        Create a new news entry.
+
+        Args:
+            data: News data including:
+                - project (int): Project ID (required)
+                - title (str): News headline (required)
+                - summary (str): Short summary (required)
+                - description (str): Main body content, supports markdown (required)
+
+        Returns:
+            Dict: Created news entry data
+        """
+        # Prepare payload
+        payload = {}
+
+        # Set required fields
+        if "title" in data:
+            payload["title"] = data["title"]
+        if "summary" in data:
+            payload["summary"] = data["summary"]
+        if "description" in data:
+            payload["description"] = {"raw": data["description"]}
+
+        # Set project link (required)
+        if "project" in data:
+            payload["_links"] = {
+                "project": {"href": f"/api/v3/projects/{data['project']}"}
+            }
+
+        return await self._request("POST", "/news", payload)
+
+    async def update_news(self, news_id: int, data: Dict) -> Dict:
+        """
+        Update an existing news entry.
+
+        Args:
+            news_id: The news ID
+            data: Update data including fields to modify:
+                - title (str): New headline (optional)
+                - summary (str): New summary (optional)
+                - description (str): New content, supports markdown (optional)
+
+        Returns:
+            Dict: Updated news entry data
+        """
+        # First get current news to get lock version
+        current_news = await self.get_news_item(news_id)
+
+        # Prepare payload with lock version
+        payload = {"lockVersion": current_news.get("lockVersion", 0)}
+
+        # Add fields to update
+        if "title" in data:
+            payload["title"] = data["title"]
+        if "summary" in data:
+            payload["summary"] = data["summary"]
+        if "description" in data:
+            payload["description"] = {"raw": data["description"]}
+
+        return await self._request("PATCH", f"/news/{news_id}", payload)
+
+    async def delete_news(self, news_id: int) -> bool:
+        """
+        Delete a news entry.
+
+        Args:
+            news_id: The news ID
+
+        Returns:
+            bool: True if successful
+        """
+        await self._request("DELETE", f"/news/{news_id}")
+        return True
+
