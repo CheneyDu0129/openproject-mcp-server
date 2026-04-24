@@ -387,6 +387,29 @@ async def search_work_packages(
 
 
 @mcp.tool
+async def get_work_package(work_package_id: int) -> str:
+    """Get a single work package by ID with full details.
+
+    Args:
+        work_package_id: ID of the work package to retrieve
+
+    Returns:
+        Formatted work package details
+    """
+    try:
+        client = get_client()
+
+        if work_package_id <= 0:
+            return format_error("work_package_id must be > 0")
+
+        result = await client.get_work_package(work_package_id)
+        return format_work_package_detail(result)
+
+    except Exception as e:
+        return format_error(f"Failed to get work package #{work_package_id}: {str(e)}")
+
+
+@mcp.tool
 async def create_work_package(input: CreateWorkPackageInput) -> str:
     """Create a new work package (task) - CRITICAL tool for creating tasks.
 

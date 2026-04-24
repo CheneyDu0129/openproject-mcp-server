@@ -432,7 +432,8 @@ Create a new task in project 5 titled "Update documentation" with type ID 1
 List all users in the OpenProject instance.
 
 **Parameters:**
-- `active_only` (boolean, optional): Show only active users (default: true)
+- `name` (string, optional): Name keyword filter (partial match)
+- `status` (string, optional): User status filter (e.g., active, locked)
 
 #### 8. `get_user`
 Get detailed information about a specific user.
@@ -612,6 +613,8 @@ List time entries with optional filtering.
 **Parameters:**
 - `work_package_id` (integer, optional): Filter by specific work package
 - `user_id` (integer, optional): Filter by specific user
+- `from_date` (string, optional): Start date (YYYY-MM-DD)
+- `to_date` (string, optional): End date (YYYY-MM-DD)
 
 #### 15. `create_time_entry`
 Create a new time entry.
@@ -621,7 +624,7 @@ Create a new time entry.
 - `hours` (number, required): Hours spent (e.g., 2.5)
 - `spent_on` (string, required): Date when time was spent (YYYY-MM-DD format)
 - `comment` (string, optional): Comment/description
-- `activity_id` (integer, optional): Activity ID
+- `activity_id` (integer, required): Activity ID
 
 #### 16. `update_time_entry`
 Update an existing time entry.
@@ -646,7 +649,7 @@ List available time entry activities.
 List project versions/milestones.
 
 **Parameters:**
-- `project_id` (integer, optional): Filter by specific project
+- `project_id` (integer, required): Project ID
 
 #### 20. `create_version`
 Create a new project version/milestone.
@@ -771,7 +774,7 @@ Get detailed information about a specific role.
 Set a parent for a work package (create parent-child relationship).
 
 **Parameters:**
-- `work_package_id` (integer, required): Work package ID to become a child
+- `child_id` (integer, required): Work package ID to become a child
 - `parent_id` (integer, required): Work package ID to become the parent
 
 **Example:**
@@ -789,8 +792,9 @@ Remove parent relationship from a work package (make it top-level).
 List all child work packages of a parent.
 
 **Parameters:**
-- `parent_id` (integer, required): Parent work package ID
-- `include_descendants` (boolean, optional): Include grandchildren and all descendants (default: false)
+- `work_package_id` (integer, required): Parent work package ID
+- `offset` (integer, optional): Pagination offset (default: 0)
+- `page_size` (integer, optional): Results per page (default: 20, max: 100)
 
 **Example:**
 ```
@@ -803,7 +807,7 @@ Create a relationship between work packages.
 **Parameters:**
 - `from_id` (integer, required): Source work package ID
 - `to_id` (integer, required): Target work package ID
-- `relation_type` (string, required): Relation type (blocks, follows, precedes, relates, duplicates, includes, requires, partof)
+- `type` (string, required): Relation type (blocks, follows, precedes, relates, duplicates, includes, requires, partof)
 - `lag` (integer, optional): Lag in working days (for follows/precedes)
 - `description` (string, optional): Optional description of the relation
 
@@ -813,18 +817,16 @@ Create a "blocks" relation where work package 5 blocks work package 8
 ```
 
 #### 37. `list_work_package_relations`
-List work package relations with optional filtering.
+List work package relations for a specific work package.
 
 **Parameters:**
-- `work_package_id` (integer, optional): Filter relations involving this work package ID
-- `relation_type` (string, optional): Filter by relation type
+- `work_package_id` (integer, required): Show relations involving this work package ID
 
 #### 38. `update_work_package_relation`
 Update an existing work package relation.
 
 **Parameters:**
 - `relation_id` (integer, required): Relation ID
-- `relation_type` (string, optional): New relation type
 - `lag` (integer, optional): Lag in working days
 - `description` (string, optional): Optional description
 
